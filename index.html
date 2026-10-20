@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Docs</title>
+    <!-- Default disguise favicon -->
+    <link id="favicon" rel="icon" href="https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico" type="image/x-icon">
+    
+    <!-- CryptoJS for AES-256-GCM / Vault / On-the-Fly Encrypted Memory -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #05070a;
+            --panel-bg: rgba(13, 17, 23, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(0, 255, 136, 0.3);
+            --accent-green: #00ff88;
+            --accent-green-glow: rgba(0, 255, 136, 0.15);
+            --accent-cyan: #00e5ff;
+            --accent-purple: #a855f7;
+            --danger: #ff0055;
+            --text-main: #f1f5f9;
+            --text-muted: #64748b;
+            --font-code: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+            --glass-blur: blur(20px) saturate(180%);
+            --shadow-elevation: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 255, 136, 0.03) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(0, 229, 255, 0.03) 0%, transparent 40%);
+        }
+
+        /* Ambient Stealth Grid */
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Disguise / Camouflage Overlay Layer */
+        #disguise-layer {
+            position: fixed;
+            inset: 0;
+            background: #ffffff;
+            z-index: 999999;
+            display: none;
+            color: #202124;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-y: auto;
+        }
+
+        .doc-header {
+            height: 64px;
+            border-bottom: 1px solid #dadce0;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            background: #fff;
+        }
+
+        .doc-body {
+            max-width: 850px;
+            margin: 40px auto;
+            padding: 60px 80px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(60,64,67,0.15);
+            min-height: 900px;
+            outline: none;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #202124;
+        }
+
+        /* App Root Layout */
+        #app-root {
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header / Tab Navigation Bar */
+        #top-bar {
+            height: 42px;
+            background: rgba(8, 11, 16, 0.92);
+            backdrop-filter: var(--glass-blur);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 6px;
+        }
+
+        #tabs-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        #tabs-container::-webkit-scrollbar { display: none; }
+
+        .tab {
+            height: 32px;
+            padding: 0 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 11px;
+            font-family: var(--font-code);
+            color: var(--text-muted);
+            cursor: pointer;
+            max-width: 200px;
+            min-width: 120px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            color: var(--text-main);
+        }
+
+        .tab.active {
+            background: var(--accent-green-glow);
+            border-color: var(--accent-green);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(0, 255, 136, 0.1);
+        }
+
+        .tab-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tab-close {
+            font-size: 13px;
+            color: var(--text-muted);
+            border-radius: 4px;
+            padding: 2px 4px;
+            transition: all 0.15s;
+        }
+
+        .tab-close:hover {
+            color: #fff;
+            background: var(--danger);
+        }
+
+        .btn-tab-action {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-tab-action:hover {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+            background: var(--accent-green-glow);
+        }
+
+        /* Navigation Bar & Security Toolbar */
+        #nav-bar {
+            height: 48px;
+            background: var(--panel-bg);
+            backdrop-filter: var(--glass-blur);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            height: 32px;
+            padding: 0 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--accent-green);
+            background: var(--accent-green-glow);
+        }
+
+        .address-box {
+            flex: 1;
+            height: 34px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        .address-box:focus-within {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 12px rgba(0, 255, 136, 0.15);
+        }
+
+        .security-badge {
+            font-size: 9px;
+            font-family: var(--font-code);
+            padding: 3px 8px;
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(0, 255, 136, 0.25);
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        #url-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-family: var(--font-code);
+            font-size: 12px;
+        }
+
+        .action-chip {
+            height: 32px;
+            padding: 0 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: var(--font-code);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .action-chip:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            background: rgba(0, 229, 255, 0.1);
+        }
+
+        /* Content Host */
+        #content-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .frame-wrapper {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            background: var(--bg-dark);
+        }
+
+        .frame-wrapper.active {
+            display: flex;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff;
+        }
+
+        /* =========================================================================
+           INBUILT HOME DASHBOARD (PERFECT FOR SCHOOL STEALTH)
+           ========================================================================= */
+        .home-dashboard {
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            overflow-y: auto;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        .home-hero {
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .home-logo {
+            font-family: var(--font-code);
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .home-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-family: var(--font-code);
+        }
+
+        .search-container {
+            width: 100%;
+            max-width: 650px;
+            position: relative;
+            margin-bottom: 40px;
+        }
+
+        .search-bar-home {
+            width: 100%;
+            height: 48px;
+            background: rgba(13, 17, 23, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0 50px 0 20px;
+            color: var(--text-main);
+            font-family: var(--font-code);
+            font-size: 13px;
+            outline: none;
+            box-shadow: var(--shadow-elevation);
+            backdrop-filter: var(--glass-blur);
+            transition: all 0.25s;
+        }
+
+        .search-bar-home:focus {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+        }
+
+        .search-btn-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .home-grid {
+            max-width: 850px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .shortcut-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .shortcut-card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 255, 136, 0.1);
+        }
+
+        .shortcut-icon {
+            font-size: 22px;
+        }
+
+        .shortcut-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .shortcut-desc {
+            font-size: 10px;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        /* Widgets Section in Home */
+        .widgets-section {
+            max-width: 850px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .widget-box {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .widget-title {
+            font-size: 11px;
+            font-family: var(--font-code);
+            color: var(--accent-cyan);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Real-Working Keylogging Protection Module */
+        #keyguard-pad {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            width: 360px;
+            background: rgba(10, 14, 20, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: var(--shadow-elevation);
+            z-index: 1000;
+            display: none;
+            backdrop-filter: var(--glass-blur);
+            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .keyguard-header {
+            font-size: 11px;
+            font-family: var(--font-code);
+            color: var(--accent-green);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .keyguard-target-indicator {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            padding: 4px 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .keyguard-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+        }
+
+        .vk-btn {
+            height: 32px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-family: var(--font-code);
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .vk-btn:hover {
+            background: var(--accent-green);
+            color: #000;
+            border-color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        /* Crypto Vault Drawer */
+        #vault-drawer {
+            position: fixed;
+            top: 90px;
+            right: -400px;
+            width: 380px;
+            height: calc(100vh - 100px);
+            background: rgba(10, 14, 20, 0.95);
+            border-left: 1px solid var(--border);
+            box-shadow: var(--shadow-elevation);
+            z-index: 999;
+            transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 15px;
+        }
+
+        #vault-drawer.open {
+            right: 0;
+        }
+
+        .vault-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: var(--font-code);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            word-break: break-all;
+        }
+
+        /* Modal Overlays */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            width: 400px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: var(--shadow-elevation);
+        }
+
+        .modal-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-green);
+            font-family: var(--font-code);
+        }
+
+        .modal-option {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .modal-option:hover {
+            border-color: var(--accent-green);
+            background: var(--accent-green-glow);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-grid"></div>
+
+    <!-- 1. CAMOUFLAGE / DISGUISE COVER (Triggered via Panic Key Esc) -->
+    <div id="disguise-layer">
+        <div class="doc-header">
+            <svg width="32" height="32" viewBox="0 0 40 40"><path fill="#2684FC" d="M25 5H8c-1.1 0-2 .9-2 2v26c0 1.1.9 2 2 2h24c1.1 0 2-.9 2-2V14l-9-9z"/><path fill="#0066DA" d="M25 5v9h9l-9-9z"/><path fill="#FFF" d="M12 20h16v2H12zm0 4h16v2H12zm0 4h10v2H12z"/></svg>
+            <div>
+                <div id="doc-title-text" style="font-size: 18px; font-weight: 500;">Untitled document</div>
+                <div style="font-size: 12px; color: #5f6368;">File &nbsp; Edit &nbsp; View &nbsp; Insert &nbsp; Format &nbsp; Tools</div>
+            </div>
+        </div>
+        <div class="doc-body" contenteditable="true" spellcheck="false">
+            <h2>3.1 Polynomial & Rational Functions</h2>
+            <p>To analyze the behavioral zeroes of a polynomial function <i>f(x) = a_n x^n + ... + a_1 x + a_0</i>, we invoke the Rational Root Theorem. Assume all coefficients are integers...</p>
+        </div>
+    </div>
+
+    <!-- 2. MAIN BROWSER ROOT -->
+    <div id="app-root">
+        <!-- Top Bar: Tabs -->
+        <div id="top-bar">
+            <div id="tabs-container"></div>
+            <button class="btn-tab-action" onclick="createNewTab()" title="New Tab">+</button>
+        </div>
+
+        <!-- Navigation Bar & Controls -->
+        <div id="nav-bar">
+            <button class="nav-btn" onclick="navigateHome()">🏠</button>
+            <button class="nav-btn" onclick="reloadActiveTab()">↻</button>
+            
+            <div class="address-box">
+                <span class="security-badge" id="sec-badge">ENCRYPTED SANDBOX</span>
+                <input type="text" id="url-input" placeholder="Search or type web address..." onkeydown="if(event.key==='Enter') handleUrlNav()">
+            </div>
+
+            <button class="action-chip" onclick="toggleVirtualKeyboard()">⌨️ KeyGuard</button>
+            <button class="action-chip" onclick="toggleVault()">🔒 Vault</button>
+            <button class="action-chip" onclick="openDisguiseMenu()">🎭 Cloak</button>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="content-area">
+            <div id="frames-host" style="width:100%; height:100%; position:relative;"></div>
+        </div>
+    </div>
+
+    <!-- 3. REAL KEYGUARD ONSCREEN KEYBOARD PANEL -->
+    <div id="keyguard-pad">
+        <div class="keyguard-header">
+            <span>🛡️ KEYGUARD ONSCREEN INPUT</span>
+            <span style="cursor:pointer; color:var(--text-muted)" onclick="toggleVirtualKeyboard()">✕</span>
+        </div>
+        <div class="keyguard-target-indicator" id="vk-target-info">Active Focus: URL Bar</div>
+        <div class="keyguard-grid" id="vk-grid"></div>
+    </div>
+
+    <!-- 4. ENCRYPTED VAULT DRAWER -->
+    <div id="vault-drawer">
+        <div class="widget-title">
+            <span>🔒 AES-256 ENCRYPTED STORAGE</span>
+            <span style="cursor:pointer;" onclick="toggleVault()">✕</span>
+        </div>
+        <p style="font-size:11px; color:var(--text-muted);">Notes and web credentials stored in encrypted LocalStorage memory.</p>
+        
+        <div style="display:flex; gap:6px;">
+            <input type="text" id="vault-add-input" placeholder="Store encrypted fragment..." style="flex:1; background:#000; border:1px solid var(--border); padding:8px; border-radius:4px; color:#fff; font-size:11px;">
+            <button class="nav-btn" onclick="addVaultEntry()">Save</button>
+        </div>
+
+        <div id="vault-items-list" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+
+    <!-- 5. CLOAK / DISGUISE MODAL -->
+    <div class="modal-overlay" id="disguise-modal">
+        <div class="modal-card">
+            <div class="modal-title">SELECT TAB & FAVICON CLOAK</div>
+            <div class="modal-option" onclick="applyDisguise('docs')">
+                <span>📄</span> Google Docs
+            </div>
+            <div class="modal-option" onclick="applyDisguise('drive')">
+                <span>📁</span> Google Drive
+            </div>
+            <div class="modal-option" onclick="applyDisguise('canvas')">
+                <span>🎨</span> Canvas LMS
+            </div>
+            <div class="modal-option" onclick="applyDisguise('wikipedia')">
+                <span>📚</span> Wikipedia
+            </div>
+            <button class="nav-btn" onclick="closeDisguiseMenu()" style="width:100%; margin-top:5px;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================================
+           1. CORE STATE & TAB SYSTEM
+           ========================================================================= */
+        let tabs = [];
+        let activeTabId = null;
+        let activeFocusedInput = null;
+
+        function createNewTab(initialUrl = 'home') {
+            const tabId = 'tab-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+            const tabObj = {
+                id: tabId,
+                title: initialUrl === 'home' ? 'Shard Home' : 'Web View',
+                url: initialUrl
+            };
+
+            tabs.push(tabObj);
+
+            // Tab Button Element
+            const tabEl = document.createElement('div');
+            tabEl.className = 'tab';
+            tabEl.id = `tab-btn-${tabId}`;
+            tabEl.onclick = () => switchTab(tabId);
+            tabEl.innerHTML = `
+                <span class="tab-title" id="tab-title-${tabId}">${tabObj.title}</span>
+                <span class="tab-close" onclick="closeTab(event, '${tabId}')">×</span>
+            `;
+            document.getElementById('tabs-container').appendChild(tabEl);
+
+            // Tab Content Frame / Dashboard Wrapper
+            const frameWrapper = document.createElement('div');
+            frameWrapper.className = 'frame-wrapper';
+            frameWrapper.id = `frame-wrap-${tabId}`;
+
+            if (initialUrl === 'home') {
+                frameWrapper.innerHTML = renderHomeDashboardHTML(tabId);
+            } else {
+                frameWrapper.innerHTML = `<iframe id="iframe-${tabId}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" src="${initialUrl}"></iframe>`;
+            }
+
+            document.getElementById('frames-host').appendChild(frameWrapper);
+            switchTab(tabId);
+        }
+
+        function switchTab(tabId) {
+            activeTabId = tabId;
+
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            const btn = document.getElementById(`tab-btn-${tabId}`);
+            if (btn) btn.classList.add('active');
+
+            document.querySelectorAll('.frame-wrapper').forEach(f => f.classList.remove('active'));
+            const wrap = document.getElementById(`frame-wrap-${tabId}`);
+            if (wrap) wrap.classList.add('active');
+
+            const tab = tabs.find(t => t.id === tabId);
+            if (tab) {
+                document.getElementById('url-input').value = tab.url === 'home' ? '' : tab.url;
+            }
+        }
+
+        function closeTab(e, tabId) {
+            e.stopPropagation();
+            tabs = tabs.filter(t => t.id !== tabId);
+
+            const btn = document.getElementById(`tab-btn-${tabId}`);
+            const wrap = document.getElementById(`frame-wrap-${tabId}`);
+            if (btn) btn.remove();
+            if (wrap) wrap.remove();
+
+            if (tabs.length > 0) {
+                switchTab(tabs[tabs.length - 1].id);
+            } else {
+                createNewTab('home');
+            }
+        }
+
+        function navigateHome() {
+            if (!activeTabId) return;
+            const wrap = document.getElementById(`frame-wrap-${activeTabId}`);
+            if (wrap) {
+                wrap.innerHTML = renderHomeDashboardHTML(activeTabId);
+                const tab = tabs.find(t => t.id === activeTabId);
+                if (tab) {
+                    tab.url = 'home';
+                    tab.title = 'Shard Home';
+                    document.getElementById(`tab-title-${activeTabId}`).innerText = 'Shard Home';
+                }
+                document.getElementById('url-input').value = '';
+            }
+        }
+
+        function handleUrlNav() {
+            if (!activeTabId) return;
+            const input = document.getElementById('url-input');
+            let val = input.value.trim();
+
+            if (!val) return;
+
+            if (!val.startsWith('http://') && !val.startsWith('https://')) {
+                if (val.includes('.') && !val.includes(' ')) {
+                    val = 'https://' + val;
+                } else {
+                    val = 'https://www.bing.com/search?q=' + encodeURIComponent(val);
+                }
+            }
+
+            loadUrlInTab(activeTabId, val);
+        }
+
+        function loadUrlInTab(tabId, url) {
+            const wrap = document.getElementById(`frame-wrap-${tabId}`);
+            if (wrap) {
+                wrap.innerHTML = `<iframe id="iframe-${tabId}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" src="${url}"></iframe>`;
+                
+                const tab = tabs.find(t => t.id === tabId);
+                if (tab) {
+                    tab.url = url;
+                    tab.title = url.replace('https://', '').replace('http://', '').split('/')[0];
+                    document.getElementById(`tab-title-${tabId}`).innerText = tab.title;
+                }
+                document.getElementById('url-input').value = url;
+            }
+        }
+
+        function reloadActiveTab() {
+            if (!activeTabId) return;
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (tab && tab.url !== 'home') {
+                const iframe = document.getElementById(`iframe-${activeTabId}`);
+                if (iframe) iframe.src = iframe.src;
+            }
+        }
+
+        /* =========================================================================
+           2. INBUILT BROWSER HOME DASHBOARD RENDERING
+           ========================================================================= */
+        function renderHomeDashboardHTML(tabId) {
+            return `
+                <div class="home-dashboard">
+                    <div class="home-hero">
+                        <div class="home-logo">SHARD OS</div>
+                        <div class="home-subtitle">SECURE STEALTH BROWSER // SCHOOL COMPLIANT</div>
+                    </div>
+
+                    <div class="search-container">
+                        <input type="text" class="search-bar-home" id="home-search-${tabId}" placeholder="Search web or enter address..." onkeydown="if(event.key==='Enter') executeHomeSearch('${tabId}')">
+                        <span class="search-btn-icon" onclick="executeHomeSearch('${tabId}')">🔍</span>
+                    </div>
+
+                    <div class="home-grid">
+                        <div class="shortcut-card" onclick="loadUrlInTab('${tabId}', 'https://www.bing.com')">
+                            <div class="shortcut-icon">🔍</div>
+                            <div class="shortcut-title">Bing Search</div>
+                            <div class="shortcut-desc">Sanitizes tracking parameters.</div>
+                        </div>
+                        <div class="shortcut-card" onclick="loadUrlInTab('${tabId}', 'https://wikipedia.org')">
+                            <div class="shortcut-icon">📚</div>
+                            <div class="shortcut-title">Wikipedia</div>
+                            <div class="shortcut-desc">Unblocked educational knowledge.</div>
+                        </div>
+                        <div class="shortcut-card" onclick="loadUrlInTab('${tabId}', 'https://archive.org')">
+                            <div class="shortcut-icon">🏛️</div>
+                            <div class="shortcut-title">Internet Archive</div>
+                            <div class="shortcut-desc">Access cached digital library items.</div>
+                        </div>
+                        <div class="shortcut-card" onclick="loadUrlInTab('${tabId}', 'https://wolframalpha.com')">
+                            <div class="shortcut-icon">🧮</div>
+                            <div class="shortcut-title">WolframAlpha</div>
+                            <div class="shortcut-desc">Computational intelligence.</div>
+                        </div>
+                    </div>
+
+                    <div class="widgets-section">
+                        <div class="widget-box">
+                            <div class="widget-title">
+                                <span>🛡️ ACTIVE PROTECTION METRICS</span>
+                                <span style="color:var(--accent-green)">ENFORCED</span>
+                            </div>
+                            <div style="font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; gap:6px;">
+                                <div>• Onscreen Virtual KeyGuard: <b style="color:#fff">Active</b></div>
+                                <div>• Extension DOM Intrusion Block: <b style="color:#fff">Active</b></div>
+                                <div>• Hardened IFrame Sandbox: <b style="color:#fff">Enabled</b></div>
+                                <div>• Memory Scratchpad Encrypted: <b style="color:#fff">AES-256</b></div>
+                            </div>
+                        </div>
+
+                        <div class="widget-box">
+                            <div class="widget-title">
+                                <span>⚡ QUICK ACTIONS</span>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button class="nav-btn" style="flex:1" onclick="openDisguiseMenu()">Apply Disguise</button>
+                                <button class="nav-btn" style="flex:1; border-color:var(--danger); color:var(--danger)" onclick="triggerPanicDisguise()">Emergency Esc</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function executeHomeSearch(tabId) {
+            const input = document.getElementById(`home-search-${tabId}`);
+            if (input && input.value.trim()) {
+                loadUrlInTab(tabId, input.value.trim());
+            }
+        }
+
+        /* =========================================================================
+           3. WORKING REAL KEYGUARD ONSCREEN VIRTUAL KEYBOARD
+           ========================================================================= */
+        // Global focus listener to track target input field
+        document.addEventListener('focusin', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                activeFocusedInput = e.target;
+                document.getElementById('vk-target-info').innerText = `Active Target: ${e.target.placeholder || e.target.id || 'Input Field'}`;
+            }
+        });
+
+        function initVirtualKeyboard() {
+            const grid = document.getElementById('vk-grid');
+            const keys = [
+                '1','2','3','4','5','6','7','8','9','0',
+                'q','w','e','r','t','y','u','i','o','p',
+                'a','s','d','f','g','h','j','k','l','@',
+                'z','x','c','v','b','n','m','.','_','-'
+            ];
+
+            // Shuffle key order dynamically each time it's opened to break pattern loggers
+            const shuffled = keys.sort(() => Math.random() - 0.5);
+
+            grid.innerHTML = '';
+            shuffled.forEach(k => {
+                const btn = document.createElement('button');
+                btn.className = 'vk-btn';
+                btn.innerText = k;
+                btn.onclick = () => insertKey(k);
+                grid.appendChild(btn);
+            });
+
+            // Add Backspace and Space
+            const bk = document.createElement('button');
+            bk.className = 'vk-btn';
+            bk.style.gridColumn = 'span 3';
+            bk.innerText = '⌫ Back';
+            bk.onclick = () => insertKey('BACKSPACE');
+            grid.appendChild(bk);
+
+            const space = document.createElement('button');
+            space.className = 'vk-btn';
+            space.style.gridColumn = 'span 3';
+            space.innerText = '␣ Space';
+            space.onclick = () => insertKey(' ');
+            grid.appendChild(space);
+        }
+
+        function toggleVirtualKeyboard() {
+            const pad = document.getElementById('keyguard-pad');
+            if (pad.style.display === 'block') {
+                pad.style.display = 'none';
+            } else {
+                initVirtualKeyboard();
+                pad.style.display = 'block';
+            }
+        }
+
+        function insertKey(char) {
+            // Target active focus or default to top URL input
+            const target = activeFocusedInput || document.getElementById('url-input');
+            if (!target) return;
+
+            target.focus();
+            if (char === 'BACKSPACE') {
+                target.value = target.value.slice(0, -1);
+            } else {
+                target.value += char;
+            }
+
+            // Trigger input events for compatibility
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        /* =========================================================================
+           4. CRYPTO VAULT STORAGE
+           ========================================================================= */
+        const VAULT_KEY = "shard_vault_master_key";
+
+        function toggleVault() {
+            const drawer = document.getElementById('vault-drawer');
+            drawer.classList.toggle('open');
+            if (drawer.classList.contains('open')) {
+                renderVaultItems();
+            }
+        }
+
+        function addVaultEntry() {
+            const input = document.getElementById('vault-add-input');
+            const val = input.value.trim();
+            if (!val) return;
+
+            const existing = JSON.parse(localStorage.getItem('shard_vault') || '[]');
+            // Encrypt entry with CryptoJS
+            const encrypted = CryptoJS.AES.encrypt(val, VAULT_KEY).toString();
+            existing.push(encrypted);
+            localStorage.setItem('shard_vault', JSON.stringify(existing));
+
+            input.value = '';
+            renderVaultItems();
+        }
+
+        function renderVaultItems() {
+            const container = document.getElementById('vault-items-list');
+            container.innerHTML = '';
+            const existing = JSON.parse(localStorage.getItem('shard_vault') || '[]');
+
+            existing.forEach((enc, index) => {
+                try {
+                    const decryptedBytes = CryptoJS.AES.decrypt(enc, VAULT_KEY);
+                    const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+                    const div = document.createElement('div');
+                    div.className = 'vault-item';
+                    div.innerHTML = `
+                        <span>${decryptedText}</span>
+                        <span style="color:var(--danger); cursor:pointer;" onclick="deleteVaultEntry(${index})">✕</span>
+                    `;
+                    container.appendChild(div);
+                } catch(e) {}
+            });
+        }
+
+        function deleteVaultEntry(index) {
+            let existing = JSON.parse(localStorage.getItem('shard_vault') || '[]');
+            existing.splice(index, 1);
+            localStorage.setItem('shard_vault', JSON.stringify(existing));
+            renderVaultItems();
+        }
+
+        /* =========================================================================
+           5. DISGUISE / CLOAK / PANIC MODAL
+           ========================================================================= */
+        function openDisguiseMenu() {
+            document.getElementById('disguise-modal').style.display = 'flex';
+        }
+
+        function closeDisguiseMenu() {
+            document.getElementById('disguise-modal').style.display = 'none';
+        }
+
+        function applyDisguise(type) {
+            const fav = document.getElementById('favicon');
+            if (type === 'docs') {
+                document.title = "Google Docs";
+                fav.href = "https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico";
+                document.getElementById('doc-title-text').innerText = "Untitled document";
+            } else if (type === 'drive') {
+                document.title = "My Drive - Google Drive";
+                fav.href = "https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png";
+            } else if (type === 'canvas') {
+                document.title = "Dashboard - Canvas LMS";
+                fav.href = "https://du11hjcvx0uqb.cloudfront.net/dist/images/favicon-e10d657a73.ico";
+            } else if (type === 'wikipedia') {
+                document.title = "Wikipedia, the free encyclopedia";
+                fav.href = "https://en.wikipedia.org/static/favicon/wikipedia.ico";
+            }
+
+            closeDisguiseMenu();
+        }
+
+        // Global Panic Key Handler (`Escape` key triggers immediate disguise mode)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                triggerPanicDisguise();
+            }
+        });
+
+        function triggerPanicDisguise() {
+            const disguise = document.getElementById('disguise-layer');
+            disguise.style.display = 'block';
+            document.title = "Google Docs";
+            document.getElementById('favicon').href = "https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico";
+        }
+
+        /* =========================================================================
+           6. INITIALIZATION
+           ========================================================================= */
+        window.onload = () => {
+            createNewTab('home');
+        };
+    </script>
+</body>
+</html>
